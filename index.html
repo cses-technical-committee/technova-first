@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALGOVERSE 2026 · First Year Quiz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg" aria-hidden="true">
+    <span class="blob b1"></span>
+    <span class="blob b2"></span>
+    <span class="blob b3"></span>
+    <span class="blob b4"></span>
+    <div class="symbols" id="symbols"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">A</span>
+      <h1 class="event-name">ALGOVERSE <span>2026</span></h1>
+    </div>
+
+    <div class="phase-pill" id="headerPhase"></div>
+
+    <div class="timer" id="timer" hidden aria-live="off">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 2.5"></path><path d="M9 2h6"></path>
+      </svg>
+      <span id="timeText">00:00</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ RULES / ENTRY SCREEN ============ -->
+    <section class="screen intro active" id="introScreen">
+      <div class="rules-card">
+        <div class="chips">
+          <span class="chip chip-phase" id="cardPhase"></span>
+          <span class="chip chip-round" id="cardRound"></span>
+        </div>
+
+        <h2>Rules &amp; Instructions</h2>
+        <p class="sub">First Year Students &middot; Please read carefully before you begin</p>
+
+        <div class="meta" id="metaRow"></div>
+
+        <ol class="rules" id="rulesList"></ol>
+
+        <button class="btn btn-primary btn-enter" id="enterBtn">
+          <span>Enter Quiz</span>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </button>
+        <p class="hint">The timer starts the moment you click <b>Enter Quiz</b>.</p>
+      </div>
+    </section>
+
+    <!-- ============ QUIZ SCREEN ============ -->
+    <section class="screen quiz" id="quizScreen">
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+
+      <div class="quiz-layout">
+        <button class="btn btn-soft palette-toggle" id="paletteToggle" aria-expanded="false">
+          Question Palette <span id="paletteCount">0/0</span>
+        </button>
+
+        <aside class="palette" id="palette">
+          <div class="palette-head">
+            <h3>Question Palette</h3>
+            <p><b id="answeredCount">0</b> of <b id="totalCount">0</b> answered</p>
+          </div>
+          <div class="palette-body" id="paletteBody"></div>
+          <div class="legend">
+            <span><i class="dot d-answered"></i>Answered</span>
+            <span><i class="dot d-marked"></i>Marked</span>
+            <span><i class="dot d-empty"></i>Not answered</span>
+          </div>
+        </aside>
+
+        <article class="q-panel">
+          <div class="q-card" id="qCard"></div>
+
+          <div class="q-actions">
+            <button class="btn btn-soft" id="prevBtn">&larr; Previous</button>
+            <div class="q-mid">
+              <button class="btn btn-ghost" id="clearBtn">Clear</button>
+              <button class="btn btn-ghost" id="markBtn">Mark for review</button>
+            </div>
+            <button class="btn btn-primary" id="nextBtn">Next &rarr;</button>
+            <button class="btn btn-submit" id="submitBtn" hidden>Submit Test</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ RESULT SCREEN ============ -->
+    <section class="screen result" id="resultScreen">
+      <div class="result-card" id="resultCard"></div>
+    </section>
+  </main>
+
+  <!-- Confirm submit modal -->
+  <div class="modal" id="confirmModal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <h3 id="confirmTitle">Submit your test?</h3>
+      <p id="confirmText"></p>
+      <div class="modal-actions">
+        <button class="btn btn-soft" id="reviewBtn">Go back &amp; review</button>
+        <button class="btn btn-submit" id="confirmSubmitBtn">Yes, submit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
