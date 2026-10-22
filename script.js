@@ -7,7 +7,9 @@
 const CONFIG = {
   eventName: 'ALGOVERSE 2026',
   phaseName: 'Tech Nova',          // shown in header + rules card
-  roundName: 'Round 1',          // shown on rules card
+  roundName: 'Technomyst',       // shown on rules card
+  year: '1st Year',
+  formspreeEndpoint: 'https://formspree.io/f/mljgqvzr',
   durationMinutes: 20,           // quiz timer (counts down, auto-submits at 00:00)
   showScoreAfterSubmit: true     // set false to hide the score after submission
 };
@@ -203,6 +205,7 @@ function setupIntro() {
 /* ------------------ START ------------------ */
 function startQuiz() {
   if (state.started) return;
+  if (!$('studentDetails').reportValidity()) return;
   state.started = true;
   state.startTime = Date.now();
   state.endTime = state.startTime + TOTAL_SECONDS * 1000;
@@ -388,6 +391,7 @@ function submitTest(auto = false) {
   renderResult({ score, per, answered, timeTaken, auto, wrong: answered - score });
   showScreen('resultScreen');
   launchConfetti();
+  sendResults({ score, answered, wrong: answered - score, timeTaken, auto });
 }
 
 function renderResult({ score, per, answered, timeTaken, auto, wrong }) {
@@ -446,6 +450,58 @@ function renderResult({ score, per, answered, timeTaken, auto, wrong }) {
   }
 }
 
+async function sendResults({ score, answered, wrong, timeTaken, auto }) {
+  const status = $('submissionStatus');
+  const endpoint = CONFIG.formspreeEndpoint.trim();
+  if (!/^https:\/\/formspree\.io\/f\/[A-Za-z0-9]+$/.test(endpoint)) {
+    status.textContent = 'Your score is shown above, but Formspree is not configured. Add your form endpoint in script.js before using this quiz.';
+    status.classList.add('is-error');
+    return;
+  }
+
+  const details = new FormData($('studentDetails'));
+  const email = String(details.get('email') || '');
+  const teamName = String(details.get('team_name') || '');
+  const submission = new FormData();
+  submission.append('team_name', teamName);
+  submission.append('year', CONFIG.year);
+  submission.append('email', email);
+  submission.append('_replyto', email);
+  submission.append('_subject', `Technomyst ${CONFIG.year} results - ${teamName}`);
+  submission.append('round', CONFIG.roundName);
+  submission.append('score', String(score));
+  submission.append('total_questions', String(TOTAL));
+  submission.append('percentage', `${Math.round((score / TOTAL) * 100)}%`);
+  submission.append('correct', String(score));
+  submission.append('incorrect', String(wrong));
+  submission.append('unanswered', String(TOTAL - answered));
+  submission.append('time_taken_seconds', String(timeTaken));
+  submission.append('auto_submitted', String(auto));
+  submission.append('submitted_at', new Date().toISOString());
+  submission.append('answers_in_question_order', QUESTIONS.map((question, index) => {
+    const selected = state.answers[index];
+    const chosen = selected === -1 ? 'Unanswered' : `${LETTERS[selected]} - ${question.options[selected]}`;
+    const correct = `${LETTERS[question.answer]} - ${question.options[question.answer]}`;
+    return `Q${String(index + 1).padStart(2, '0')}: Selected: ${chosen} | Correct: ${correct}`;
+  }).join('\n'));
+
+  status.classList.remove('is-error');
+  status.textContent = 'Sending your score…';
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      body: submission,
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error(`Formspree returned HTTP ${response.status}`);
+    status.textContent = 'Submission received. Your score has been sent.';
+  } catch (error) {
+    console.error('Could not submit Technomyst results to Formspree:', error);
+    status.textContent = 'Your score is shown above, but it could not be sent. Please notify the event organizer.';
+    status.classList.add('is-error');
+  }
+}
+
 function remark(p) {
   if (p >= 85) return 'Outstanding! 🌟';
   if (p >= 65) return 'Great work! 👏';
@@ -479,6 +535,7 @@ function launchConfetti() {
 
 /* ------------------ EVENTS ------------------ */
 function bindEvents() {
+  $('studentDetails').addEventListener('submit', (event) => event.preventDefault());
   $('enterBtn').addEventListener('click', startQuiz);
   $('prevBtn').addEventListener('click', () => goTo(state.current - 1));
   $('nextBtn').addEventListener('click', () => goTo(state.current + 1));

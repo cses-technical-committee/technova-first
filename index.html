@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ALGOVERSE 2026 · First Year Quiz</title>
+  <title>ALGOVERSE 2026 · Technomyst · First Year Quiz</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
@@ -51,9 +51,19 @@
 
         <div class="meta" id="metaRow"></div>
 
+        <form class="student-details" id="studentDetails">
+          <h3>Team details</h3>
+          <label for="teamName">Team name</label>
+          <input id="teamName" name="team_name" type="text" autocomplete="organization" maxlength="100" required />
+          <label for="studentYear">Year</label>
+          <input id="studentYear" name="year" type="text" value="1st Year" readonly required />
+          <label for="studentEmail">Email address</label>
+          <input id="studentEmail" name="email" type="email" autocomplete="email" maxlength="254" required />
+        </form>
+
         <ol class="rules" id="rulesList"></ol>
 
-        <button class="btn btn-primary btn-enter" id="enterBtn">
+        <button class="btn btn-primary btn-enter" id="enterBtn" type="button">
           <span>Enter Quiz</span>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
         </button>
@@ -102,6 +112,7 @@
     <!-- ============ RESULT SCREEN ============ -->
     <section class="screen result" id="resultScreen">
       <div class="result-card" id="resultCard"></div>
+      <p class="submission-status" id="submissionStatus" role="status" aria-live="polite"></p>
     </section>
   </main>
 
