@@ -8,9 +8,7 @@ const CONFIG = {
   eventName: 'ALGOVERSE 2026',
   phaseName: 'Tech Nova',          // shown in header + rules card
   roundName: 'Technomyst',       // shown on rules card
-  year: '1st Year',
-  formspreeEndpoint: 'https://formspree.io/f/mljgqvzr',
-  durationMinutes: 20,           // quiz timer (counts down, auto-submits at 00:00)
+  durationMinutes: 30,           // quiz timer (counts down, auto-submits at 00:00)
   showScoreAfterSubmit: true     // set false to hide the score after submission
 };
 
@@ -120,20 +118,25 @@ const secById = (id) => SECTIONS.find((s) => s.id === id);
 const LETTERS = ['A', 'B', 'C', 'D'];
 const TOTAL = QUESTIONS.length;
 const TOTAL_SECONDS = CONFIG.durationMinutes * 60;
+const STORAGE_KEY = 'technova-1st-year-session-v1';
 
 const state = {
   current: 0,
   answers: new Array(TOTAL).fill(-1),
   marked: new Set(),
+  teamName: '',
   started: false,
   submitted: false,
   endTime: 0,
   startTime: 0,
   timerId: null,
+  expiryId: null,
+  result: null,
   warned5: false,
   warned1: false
 };
 
+const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const pad = (n) => String(n).padStart(2, '0');
 const fmt = (sec) => {
   sec = Math.max(0, Math.round(sec));
@@ -173,7 +176,7 @@ function setupIntro() {
 
   const rules = [
     `This quiz is only for <b>1st Year</b> students. It has <b>${TOTAL} multiple-choice questions</b> across ${SECTIONS.length} sections.`,
-    `Every question has <b>four options (A–D)</b> and only <b>one</b> correct answer.`,
+    `Every question has <b>four options (A–D)</b> and only <b>one</b> correct answer. Each correct answer earns <b>4 marks</b>, each incorrect answer loses <b>1 mark</b>, and unanswered questions earn <b>0 marks</b>.`,
     `You get <b>${CONFIG.durationMinutes} minutes</b>. The timer starts as soon as you press <b>Enter Quiz</b> and the test is <b>auto-submitted</b> when time runs out.`,
     `Move freely between questions using the palette. You can <b>change an answer</b> or <b>mark a question for review</b> any time before submitting.`,
     `Do <b>not</b> refresh, go back or close this page during the test.`,
@@ -206,13 +209,29 @@ function setupIntro() {
 function startQuiz() {
   if (state.started) return;
   if (!$('studentDetails').reportValidity()) return;
+  state.teamName = $('teamName').value.trim();
+  if (!state.teamName) {
+    $('teamName').focus();
+    toast('Please enter your team name.');
+    return;
+  }
+  $('teamName').value = state.teamName;
   state.started = true;
   state.startTime = Date.now();
   state.endTime = state.startTime + TOTAL_SECONDS * 1000;
+  if (!saveSession()) {
+    state.started = false;
+    state.startTime = 0;
+    state.endTime = 0;
+    return;
+  }
 
+  $('headerPhase').textContent = `${CONFIG.phaseName} · ${CONFIG.roundName} · ${state.teamName}`;
+  document.querySelector('.brand').setAttribute('data-phase', $('headerPhase').textContent);
   $('timer').hidden = false;
   tick();
   state.timerId = setInterval(tick, 250);
+  state.expiryId = setTimeout(() => submitTest(true), Math.max(0, state.endTime - Date.now()));
 
   buildPalette();
   $('totalCount').textContent = TOTAL;
@@ -226,6 +245,90 @@ function guardUnload(e) {
     e.preventDefault();
     e.returnValue = '';
   }
+}
+
+function saveSession() {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: 1,
+      started: state.started,
+      submitted: state.submitted,
+      startTime: state.startTime,
+      endTime: state.endTime,
+      current: state.current,
+      answers: state.answers,
+      marked: [...state.marked],
+      teamName: state.teamName,
+      result: state.result
+    }));
+    return true;
+  } catch (error) {
+    console.error('Could not save the Technova test session:', error);
+    toast('Your test session could not be saved. Please keep this page open.');
+    return false;
+  }
+}
+
+function restoreSession() {
+  let raw;
+  try {
+    raw = sessionStorage.getItem(STORAGE_KEY);
+  } catch (error) {
+    console.error('Could not restore the Technova test session:', error);
+    toast('Your saved test session could not be accessed.');
+    return;
+  }
+  if (!raw) return;
+
+  let saved;
+  try {
+    saved = JSON.parse(raw);
+  } catch (error) {
+    console.error('Could not parse the saved Technova test session:', error);
+    toast('Your saved test session is invalid.');
+    return;
+  }
+  const validAnswers = saved && Array.isArray(saved.answers) && saved.answers.length === TOTAL &&
+    saved.answers.every((answer, i) => Number.isInteger(answer) && answer >= -1 && answer < QUESTIONS[i].options.length);
+  const validMarks = saved && Array.isArray(saved.marked) && saved.marked.every((i) => Number.isInteger(i) && i >= 0 && i < TOTAL);
+  if (!saved || saved.version !== 1 || !saved.started || typeof saved.teamName !== 'string' ||
+      !Number.isFinite(saved.startTime) || !Number.isFinite(saved.endTime) ||
+      !Number.isInteger(saved.current) || saved.current < 0 || saved.current >= TOTAL ||
+      !validAnswers || !validMarks || (saved.submitted && (!saved.result || !Number.isFinite(saved.result.score)))) {
+    console.error('The saved Technova test session has an invalid shape.');
+    toast('Your saved test session is invalid.');
+    return;
+  }
+
+  state.started = true;
+  state.submitted = Boolean(saved.submitted);
+  state.startTime = saved.startTime;
+  state.endTime = saved.endTime;
+  state.current = saved.current;
+  state.answers = saved.answers;
+  state.marked = new Set(saved.marked);
+  state.teamName = saved.teamName;
+  state.result = saved.result || null;
+  $('teamName').value = state.teamName;
+  $('headerPhase').textContent = `${CONFIG.phaseName} · ${CONFIG.roundName} · ${state.teamName}`;
+  document.querySelector('.brand').setAttribute('data-phase', $('headerPhase').textContent);
+  $('timer').hidden = false;
+
+  if (state.submitted) {
+    renderResult(state.result);
+    showScreen('resultScreen');
+    $('submissionStatus').textContent = 'Results are available on this page.';
+    return;
+  }
+
+  buildPalette();
+  $('totalCount').textContent = TOTAL;
+  showScreen('quizScreen');
+  renderQuestion(state.current, 'next');
+  window.addEventListener('beforeunload', guardUnload);
+  state.timerId = setInterval(tick, 250);
+  state.expiryId = setTimeout(() => submitTest(true), Math.max(0, state.endTime - Date.now()));
+  tick();
 }
 
 /* ------------------ TIMER ------------------ */
@@ -343,6 +446,7 @@ function updateMarkBtn() {
 function selectOption(i) {
   if (state.submitted) return;
   state.answers[state.current] = i;
+  saveSession();
   document.querySelectorAll('.opt').forEach((el, idx) => {
     el.classList.toggle('selected', idx === i);
     el.setAttribute('aria-checked', idx === i ? 'true' : 'false');
@@ -351,8 +455,9 @@ function selectOption(i) {
 }
 
 function goTo(i) {
-  if (i < 0 || i >= TOTAL || i === state.current) return;
+  if (state.submitted || i < 0 || i >= TOTAL || i === state.current) return;
   renderQuestion(i, i > state.current ? 'next' : 'prev');
+  saveSession();
 }
 
 /* ------------------ SUBMIT ------------------ */
@@ -371,32 +476,40 @@ function openConfirm() {
 
 function submitTest(auto = false) {
   if (state.submitted) return;
+  if (Date.now() >= state.endTime) auto = true;
   state.submitted = true;
   clearInterval(state.timerId);
+  clearTimeout(state.expiryId);
   window.removeEventListener('beforeunload', guardUnload);
   $('confirmModal').hidden = true;
 
   const timeTaken = Math.min(TOTAL_SECONDS, Math.round((Date.now() - state.startTime) / 1000));
 
   // score
+  let correct = 0;
+  let wrong = 0;
   let score = 0;
   const per = {};
   SECTIONS.forEach((s) => (per[s.id] = { got: 0, total: 0 }));
   QUESTIONS.forEach((qu, i) => {
     per[qu.sec].total++;
-    if (state.answers[i] === qu.answer) { score++; per[qu.sec].got++; }
+    if (state.answers[i] === qu.answer) { correct++; score += 4; per[qu.sec].got++; }
+    else if (state.answers[i] !== -1) { wrong++; score--; }
   });
   const answered = state.answers.filter((a) => a !== -1).length;
+  const result = { score, per, answered, correct, wrong, timeTaken, auto };
+  state.result = result;
+  saveSession();
 
-  renderResult({ score, per, answered, timeTaken, auto, wrong: answered - score });
+  renderResult(result);
   showScreen('resultScreen');
   launchConfetti();
-  sendResults({ score, answered, wrong: answered - score, timeTaken, auto });
+  $('submissionStatus').textContent = 'Results are available on this page.';
 }
 
-function renderResult({ score, per, answered, timeTaken, auto, wrong }) {
+function renderResult({ score, per, answered, timeTaken, auto, correct, wrong }) {
   const card = $('resultCard');
-  const pct = Math.round((score / TOTAL) * 100);
+  const pct = Math.max(0, Math.round((score / (TOTAL * 4)) * 100));
   const R = 70, C = 2 * Math.PI * R;
 
   let scoreBlock = '';
@@ -413,7 +526,7 @@ function renderResult({ score, per, answered, timeTaken, auto, wrong }) {
           <circle class="ring-fg" id="ringFg" cx="85" cy="85" r="${R}" fill="none" stroke-width="14"
                   stroke-dasharray="${C}" stroke-dashoffset="${C}"/>
         </svg>
-        <div class="ring-text"><b id="scoreNum">0</b><span>out of ${TOTAL}</span></div>
+        <div class="ring-text"><b id="scoreNum">0</b><span>out of ${TOTAL * 4} marks</span></div>
       </div>
       <div class="breakdown">
         ${SECTIONS.map((s) => `
@@ -431,75 +544,43 @@ function renderResult({ score, per, answered, timeTaken, auto, wrong }) {
     </div>
     <h2>${auto ? "Time's up — test submitted!" : 'Test submitted!'}</h2>
     <p class="sub">${CONFIG.phaseName} · ${CONFIG.roundName} &middot; ${CONFIG.eventName}</p>
+    <p class="team-result">Team: <b>${esc(state.teamName)}</b></p>
     <div class="stats">
-      <div class="stat s-ok"><b>${CONFIG.showScoreAfterSubmit ? score : '–'}</b>Correct</div>
+      <div class="stat s-ok"><b>${CONFIG.showScoreAfterSubmit ? correct : '–'}</b>Correct</div>
       <div class="stat s-bad"><b>${CONFIG.showScoreAfterSubmit ? wrong : '–'}</b>Wrong</div>
       <div class="stat s-skip"><b>${TOTAL - answered}</b>Unattempted</div>
       <div class="stat s-time"><b>${fmt(timeTaken)}</b>Time taken</div>
     </div>
-    ${CONFIG.showScoreAfterSubmit ? `<p class="marks-line">Marks scored: <b>${score} / ${TOTAL}</b> &middot; ${pct}% &middot; ${remark(pct)}</p>` : ''}
+    ${CONFIG.showScoreAfterSubmit ? `<p class="marks-line">Marks scored: <b>${score} / ${TOTAL * 4}</b> &middot; ${pct}% &middot; ${remark(pct)}</p>` : ''}
     ${scoreBlock}
+    ${renderAnswerReview()}
     <p class="bye">Thank you for participating in ALGOVERSE 2026. Good luck! 🎉</p>`;
 
   if (CONFIG.showScoreAfterSubmit) {
     requestAnimationFrame(() => setTimeout(() => {
-      $('ringFg').style.strokeDashoffset = C * (1 - score / TOTAL);
+      $('ringFg').style.strokeDashoffset = C * (1 - Math.max(0, score) / (TOTAL * 4));
       document.querySelectorAll('.bk-fill').forEach((f) => (f.style.width = f.dataset.w + '%'));
       animateNumber($('scoreNum'), score, 1400);
     }, 250));
   }
 }
 
-async function sendResults({ score, answered, wrong, timeTaken, auto }) {
-  const status = $('submissionStatus');
-  const endpoint = CONFIG.formspreeEndpoint.trim();
-  if (!/^https:\/\/formspree\.io\/f\/[A-Za-z0-9]+$/.test(endpoint)) {
-    status.textContent = 'Your score is shown above, but Formspree is not configured. Add your form endpoint in script.js before using this quiz.';
-    status.classList.add('is-error');
-    return;
-  }
-
-  const details = new FormData($('studentDetails'));
-  const email = String(details.get('email') || '');
-  const teamName = String(details.get('team_name') || '');
-  const submission = new FormData();
-  submission.append('team_name', teamName);
-  submission.append('year', CONFIG.year);
-  submission.append('email', email);
-  submission.append('_replyto', email);
-  submission.append('_subject', `Technomyst ${CONFIG.year} results - ${teamName}`);
-  submission.append('round', CONFIG.roundName);
-  submission.append('score', String(score));
-  submission.append('total_questions', String(TOTAL));
-  submission.append('percentage', `${Math.round((score / TOTAL) * 100)}%`);
-  submission.append('correct', String(score));
-  submission.append('incorrect', String(wrong));
-  submission.append('unanswered', String(TOTAL - answered));
-  submission.append('time_taken_seconds', String(timeTaken));
-  submission.append('auto_submitted', String(auto));
-  submission.append('submitted_at', new Date().toISOString());
-  submission.append('answers_in_question_order', QUESTIONS.map((question, index) => {
+function renderAnswerReview() {
+  return `<section class="answer-review"><h3>Answer review</h3>${QUESTIONS.map((question, index) => {
     const selected = state.answers[index];
-    const chosen = selected === -1 ? 'Unanswered' : `${LETTERS[selected]} - ${question.options[selected]}`;
-    const correct = `${LETTERS[question.answer]} - ${question.options[question.answer]}`;
-    return `Q${String(index + 1).padStart(2, '0')}: Selected: ${chosen} | Correct: ${correct}`;
-  }).join('\n'));
-
-  status.classList.remove('is-error');
-  status.textContent = 'Sending your score…';
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      body: submission,
-      headers: { Accept: 'application/json' }
-    });
-    if (!response.ok) throw new Error(`Formspree returned HTTP ${response.status}`);
-    status.textContent = 'Submission received. Your score has been sent.';
-  } catch (error) {
-    console.error('Could not submit Technomyst results to Formspree:', error);
-    status.textContent = 'Your score is shown above, but it could not be sent. Please notify the event organizer.';
-    status.classList.add('is-error');
-  }
+    const isCorrect = selected === question.answer;
+    const outcome = selected === -1 ? 'Unanswered' : (isCorrect ? 'Correct' : 'Incorrect');
+    const marked = state.marked.has(index);
+    return `<article class="answer-review-item">
+      <h4>Question ${index + 1}: ${esc(question.text)}</h4>
+      <p class="review-status ${selected === -1 ? 'is-unanswered' : (isCorrect ? 'is-correct' : 'is-incorrect')}">${outcome}${marked ? ' · Marked for review' : ''}</p>
+      <ul>${question.options.map((option, optionIndex) => {
+        const correctOption = optionIndex === question.answer;
+        const chosenOption = optionIndex === selected;
+        return `<li class="${correctOption ? 'review-correct' : ''} ${chosenOption ? 'review-selected' : ''}">${LETTERS[optionIndex]}. ${esc(option)}${correctOption ? ' — Correct answer' : ''}${chosenOption ? ' — Team answer' : ''}</li>`;
+      }).join('')}</ul>
+    </article>`;
+  }).join('')}</section>`;
 }
 
 function remark(p) {
@@ -536,18 +617,25 @@ function launchConfetti() {
 /* ------------------ EVENTS ------------------ */
 function bindEvents() {
   $('studentDetails').addEventListener('submit', (event) => event.preventDefault());
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.started && !state.submitted) tick();
+  });
   $('enterBtn').addEventListener('click', startQuiz);
   $('prevBtn').addEventListener('click', () => goTo(state.current - 1));
   $('nextBtn').addEventListener('click', () => goTo(state.current + 1));
   $('clearBtn').addEventListener('click', () => {
+    if (state.submitted) return;
     state.answers[state.current] = -1;
     renderQuestionKeepAnim();
+    saveSession();
   });
   $('markBtn').addEventListener('click', () => {
+    if (state.submitted) return;
     const i = state.current;
     state.marked.has(i) ? state.marked.delete(i) : state.marked.add(i);
     updateMarkBtn();
     refreshPalette();
+    saveSession();
   });
   $('submitBtn').addEventListener('click', openConfirm);
   $('reviewBtn').addEventListener('click', () => ($('confirmModal').hidden = true));
@@ -582,3 +670,4 @@ function renderQuestionKeepAnim() {
 /* ------------------ INIT ------------------ */
 setupIntro();
 bindEvents();
+restoreSession();
